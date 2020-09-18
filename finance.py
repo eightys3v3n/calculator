@@ -3,7 +3,7 @@ import locale
 locale.setlocale(locale.LC_ALL, '')
 
 
-RESULT_PRECISION = 4
+RESULT_PRECISION = 4 # How many decimals should we round results from formulas to
 
 
 # General
@@ -17,7 +17,7 @@ class tmv:
     """Comparing present money with future money using interest rates."""
     
     def pv(*, fv, r, n):
-        """The present value of a future amount of money.
+        """The present value of a future amount of money. To discount the future money.
         fv: future value
         r: yearly interest rate during the whole period
         n: number of years in the future
@@ -31,7 +31,7 @@ class tmv:
         return _pv_
 
     def fv(*, pv, r, n):
-        """The future value of a present amount of money.
+        """The future value of a present amount of money. To compound present money.
         pv: present value
         r: yearly interest rate over the whole period
         n: get the value in how many years
@@ -46,6 +46,20 @@ class tmv:
 
 class invest:
     """Calculations for investments."""
+
+    class perpetuity:
+        def pv_of(*, init, r):
+            """The present  value of a perpetuity.
+            init: the initial investment
+            r: rate of return / discount rate
+            
+            If we invest $1,000 into a bank account at a guarenteed 2% interest rate:
+              (init=1000, r=0.02) == 
+              So the present value of such a perpetuity is $.
+            """
+            pv = init / r
+            pv = round(pv, RESULT_PRECISION)
+            return pv
     
     class annuity:
         """Calculations for annuities."""
