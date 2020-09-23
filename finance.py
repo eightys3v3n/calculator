@@ -1,9 +1,16 @@
 import math
 import locale
+import sympy
+import logging
+import unittest
 locale.setlocale(locale.LC_ALL, '')
 
 
 RESULT_PRECISION = 4 # How many decimals should we round results from formulas to
+logging.basicConfig(level=logging.INFO)
+
+global FUNCTIONS
+FUNCTIONS = {} # contains all the cached function rearrangements
 
 
 # General
@@ -12,114 +19,246 @@ def num_format(num):
     return "{:n}".format(num)
 
 
+def all_functions(var, expr, vars):
+    root_var = var
+    root_expr = expr
+    var = None
+    expr = None
+    functions = {}
+
+    vars.sort(key=lambda v:v.name) # so we can predict the argument order
+    root_eq = sympy.Eq(root_var, root_expr) # so we can rearrange it
+    #print("Given equation:")
+    #sympy.pprint(root_eq)
+                  
+    for var in vars:
+        try:
+            expr, = sympy.solve(root_eq, var)
+        except NotImplementedError as e:
+            print("No method found to solve for {} in equation".format(var))
+            sympy.pprint(root_eq)
+            continue
+        if not expr:
+            #print("Couldn't solve for {}".format(var.name))
+            continue
+        eq = sympy.Eq(var, expr)
+        #print("Derived equation:")
+        #sympy.pprint(eq)
+
+        new_vars = vars.copy()
+        new_vars.remove(var)
+        functions[var.name] = sympy.lambdify(new_vars, expr)
+    return functions    
+
+
 # Time Value of Money
-class tmv:
-    """Comparing present money with future money using interest rates."""
+def tmv(pv=None, fv=None, r=None, n=None, should_round=True):
+    """Converts between present money and future money taking into account interest rates and years past.
+    pv: present value
+    fv: future value with compound interest added
+    r: compound yearly interest rate
+    n: years
+    """
+    global FUNCTIONS
+    name = 'solve'
+
+    # generate all rearrangements of the given expression
+    if name not in FUNCTIONS:
+        _pv, _fv, _r, _n = sympy.symbols("pv fv r n")
+        pv_expr = _fv / ((1+_r)**_n)
+        FUNCTIONS[name] = all_functions(_pv, pv_expr, [_pv, _fv, _r, _n])
+
+    # insist on the right number of arguments
+    supplied = sum(1 if v is not None else 0 for v in (pv, fv, r, n))
+    if supplied != 3:
+        raise Exception("Invalid number of arguments")
+
+    if pv is None:
+        ret = [FUNCTIONS[name]['pv'](fv, n, r), "PV"]
+    elif fv is None:
+        ret = [FUNCTIONS[name]['fv'](n, pv, r), "FV"]
+    elif r is None:
+        ret = [FUNCTIONS[name]['r'](fv, n, pv), "r"]
+    elif n is None:
+        ret = [FUNCTIONS[name]['n'](fv, pv, r), "n"]
+    else:
+        print("You supplied all the arguments, there's nothing to calculate")
+        return None
+
+    if should_round:
+        ret[0] = round(ret[0], RESULT_PRECISION)
+    return ret
     
-    def pv(*, fv, r, n):
-        """The present value of a future amount of money. To discount the future money.
-        fv: future value
-        r: yearly interest rate during the whole period
-        n: number of years in the future
 
-        If we are going to be given $1000 in 8 years (a 2% interest rate the whole time):
-          pv(1000, 0.02, 8) == $853.4904
-          The money would currently be worth $853.49 if the interest rate stays at 2% over those 8 years.
-        """
-        _pv_ = fv / ((1+r)**n)
-        _pv_ = round(_pv_, RESULT_PRECISION)
-        return _pv_
+class Test_tmv(unittest.TestCase):
+    def test_pv(self):
+        pv, _ = tmv(fv=1000, r=0.02, n=10)
+        self.assertAlmostEqual(pv, 820.3483)
 
-    def fv(*, pv, r, n):
-        """The future value of a present amount of money. To compound present money.
-        pv: present value
-        r: yearly interest rate over the whole period
-        n: get the value in how many years
+    def test_fv(self):
+        fv, _ = tmv(pv=1000, r=0.02, n=10)
+        self.assertAlmostEqual(fv, 1218.9944)
 
-        If we are going to do a one time investment of $1000 for 8 years (2% interest the whole time):
-          (1000, 0.02, 8) == $1171.6594
-          We would have $1171.66 at the end of the eighth year.
-        """
-        _fv_ = pv * ((1+r)**n)
-        _fv_ = round(_fv_, RESULT_PRECISION)
-        return _fv_
+    def test_r(self):
+        r, _ = tmv(pv=1000, fv=1218.9944, n=10)
+        self.assertAlmostEqual(r, 0.02)
 
-class invest:
-    """Calculations for investments."""
+    def test_n(self):
+        n, _ = tmv(pv=1000, fv=1218.9944, r=0.02)
+        self.assertAlmostEqual(n, 10)
 
-    class perpetuity:
-        def pv_of(*, init, r):
-            """The present  value of a perpetuity.
-            init: the initial investment
-            r: rate of return / discount rate
-            
-            If we invest $1,000 into a bank account at a guarenteed 2% interest rate:
-              (init=1000, r=0.02) == 
-              So the present value of such a perpetuity is $.
-            """
-            pv = init / r
-            pv = round(pv, RESULT_PRECISION)
-            return pv
-    
-    class annuity:
-        """Calculations for annuities."""
+
+def perpetuity(pv=None, C=None, r=None, should_round=True):
+    """Calculates for perpetuities given the annual payment and the interest rate.
+    pv: present value
+    C: yearly payment
+    r: yearly interest rate
+    """
+    global FUNCTIONS
+    name = 'perpetuity'
+
+    # generate all rearrangements of the given expression
+    if name not in FUNCTIONS:
+        pv_, C_, r_ = sympy.symbols("pv C r")
+        pv_expr = C_ / r_
+        FUNCTIONS[name] = all_functions(pv_, pv_expr, [pv_, C_, r_])
+
+    # insist on the right number of arguments
+    supplied = sum(1 if v is not None else 0 for v in (pv, C, r))
+    if supplied != 2:
+        raise Exception("Invalid number of arguments")
+
+    if pv is None:
+        ret = [FUNCTIONS[name]['pv'](C, r), "PV"]
+    elif C is None:
+        ret = [FUNCTIONS[name]['C'](pv, r), "C"]
+    elif r is None:
+        ret = [FUNCTIONS[name]['r'](C, pv), "r"]
+    else:
+        print("You supplied all the arguments, there's nothing to calculate")
+        return None
+
+    if should_round:
+        ret[0] = round(ret[0], RESULT_PRECISION)
+    return ret
+
+
+class Test_perpetuity(unittest.TestCase):
+    def test_pv(self):
+        pv, _ = perpetuity(C=1000, r=0.02)
+        self.assertAlmostEqual(pv, 50_000)
+
+    def test_C(self):
+        C, _ = perpetuity(pv=50_000, r=0.02)
+        self.assertAlmostEqual(C, 1000)
+
+    def test_r(self):
+        r, _ = perpetuity(pv=50_000, C=1000)
+        self.assertAlmostEqual(r, 0.02)
+
+
+def _annuity_pv(pv=None, C=None, r=None, n=None, should_round=True):
+    global FUNCTIONS
+    name = 'annuity_pv'
+
+    # generate all rearrangements of the given expression
+    if name not in FUNCTIONS:
+        _pv, _C, _r, _n = sympy.symbols("pv C r n")
+        pv_expr = _C * 1/_r * (1 - 1/(1+_r)**_n)
+        FUNCTIONS[name] = all_functions(_pv, pv_expr, [_pv, _C, _r, _n])
+    # insist on the right number of arguments
+    supplied = sum(1 if v is not None else 0 for v in (pv, C, r, n))
+    if supplied != 3:
+        raise Exception("Invalid number of arguments")
+
+
+    if pv is None:
+        ret = [FUNCTIONS[name]['pv'](C, n, r), "PV"]
+    elif C is None:
+        ret = [FUNCTIONS[name]['C'](n, pv, r), "C"]
+    elif r is None:
+        raise NotImplementedError("Can't calculate for r because I can't rearrange the formula.")
+        print("Use the calculator with {}PV; {}C; {}N; CPT; I/Y".format(pv, C, n))
+    elif n is None:
+        raise NotImplementedError("Can't calculate for n because I can't rearrange the formula.")
+        print("Use the calculator with {}PV; {}C; {}I/Y; CPT; N".format(pv, C, r))
+    else:
+        print("You supplied all the arguments, there's nothing to calculate")
+        return None
+
+    if should_round:
+        ret[0] = round(ret[0], RESULT_PRECISION)
+    return ret
+
+
+class Test_annuity_pv(unittest.TestCase):
+    def test_pv(self):
+        pv, _ = _annuity_pv(C=1000, r=0.02, n=10)
+        self.assertAlmostEqual(pv, 8982.5850)
+
+    def test_C(self):
+        C, _ = _annuity_pv(pv=8982.5850, r=0.02, n=10)
+        self.assertAlmostEqual(C, 1000)
+
+
+def _annuity_fv(fv=None, C=None, r=None, n=None, should_round=True):
+    if fv is None:
+        pv, _ = _annuity_pv(C=C, r=r, n=n, should_round=False)
+        fv, _ = tmv(pv=pv, r=r, n=n, should_round=False)
+        ret = [fv, "FV"]
+    else:
+        pv, _ = tmv(fv=fv, r=r, n=n, should_round=False)
+        ret = _annuity_pv(pv=pv, C=C, r=r, n=n, should_round=False)
+
+    if should_round:
+        ret[0] = round(ret[0], RESULT_PRECISION)
+    return ret
+
+
+class Test_annuity_pv(unittest.TestCase):
+    def test_fv(self):
+        pv, _ = _annuity_fv(C=1000, r=0.02, n=10)
+        self.assertAlmostEqual(pv, 10949.7210)
+
+    def test_C(self):
+        C, _ = _annuity_fv(fv=10949.7210, r=0.02, n=10)
+        self.assertAlmostEqual(C, 1000)
         
-        def pv_of(*, c, r, n):
-            """The present value of an annuity (yearly deposits) using interest.
-            c: the yearly deposit amount
-               this is in money at the time of the deposit. so the first deposit
-               is in money valued at the end of this year. the second deposit
-               is in money valued at the end of next year.
-            r: yearly interest rate
-            n: number of years
-            
-            If we invest $1000 a year (at the end of the year) for 8 years (2% interest the whole time):
-              (c=1000, r=0.02, n=8) == 7325.4814
-              We would have $8582.97 in eight years and it would be worth $7325.48 in today dollars.
-            """
-            pv = c * 1/r * (1 - 1/(1+r)**n)
-            pv = round(pv, RESULT_PRECISION)
-            return pv
 
+# Time Value of Money
+def annuity(pv=None, fv=None, C=None, r=None, n=None):
+    """Converts between present money and future money taking into account interest rates and years past.
+    pv: present value
+    fv: future value with compound interest added
+    r: compound yearly interest rate
+    n: years
+    """
     
-        def fv_of(*, c, r, n):
-            """The future value of an annuity (yearly deposits) using interest.
-            c: the yearly deposit amount.
-               this is in money at the time of the deposit. so the first deposit
-               is in money valued at the end of this year. the second deposit
-               is in money valued at the end of next year.
-            r: yearly interest rate
-            n: number of years
 
-            If we invest $1000 aa year (at the end of the year) for 8 years (2% interest the whole time):
-              (1000, 0.02, 8) == 8582.9691
-              We would have $8582.97 dollars in eight years which would be worth $7325.48 in today dollars.
-            """
-            fv = c * 1/r * ((1+r)**n - 1)
-            fv = round(fv, RESULT_PRECISION)
-            return fv
-
+    if pv is None:
+        return _annuity_pv(fv=fv, C=C, r=r, n=n)
+    elif fv is None:
+        return _annuity_fv(pv=pv, C=C, r=r, n=n)
+    else:
+        print("No present or future value specified")
     
-        def cashflow_of(*, fv, r, n):
-            """The required monthly payment of an annuity to end up with fv dollars.
-            fv: the amount of money you want to have in n years
-            r: yearly interest rate
-            n: in how many years do you want to have this money
 
-            If we want to have $1,000 in 10 years at an interest rate of 2% the whole time:
-              (fv=1,000, r=0.02, n=10) == 91.3265
-              So we would have to save $91.33 every month to end up with $1,000 at the end of 10 years.
-            """
-            c = fv / (1/r * ((1+r)**n -1))
-            c = round(c, RESULT_PRECISION)
-            return c
-
-    # need a function for n years with odd deposit amounts
-    #f = lambda r: tmv.fv(400 / (1+r) + 500 / (1+r)**2 + 1000 / (1+r)**3, r, 3)
-    # calculates the future value of an annuity with specific deposit amounts.
-
-    # need a function to calculate the payment if we have the pv_of_annuity
+def Test_annuity(unittest.TestCase):
+    # test from fv to pv
+    # test from pv to fv
         
 
-class loan: pass
+"""
+Things still required
+
+EAR interest, APR interest rate, Nominal rate
+  EAR = 1  + (APR/m)**m - 1
+  m is the compounding periods per year (monthly means m=12)
+
+annuities with n years of odd deposit amounts. maybe input a list?
+  f = lambda r: tmv.fv(400 / (1+r) + 500 / (1+r)**2 + 1000 / (1+r)**3, r, 3)
+  calculates the future value of an annuity with specific deposit amounts.
+"""
+
+
     
