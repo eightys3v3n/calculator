@@ -251,6 +251,8 @@ def Test_annuity(unittest.TestCase):
 """
 Things still required
 
+Fix number format for large numbers
+
 EAR interest, APR interest rate, Nominal rate
   EAR = 1  + (APR/m)**m - 1
   m is the compounding periods per year (monthly means m=12)
@@ -258,6 +260,8 @@ EAR interest, APR interest rate, Nominal rate
 annuities with n years of odd deposit amounts. maybe input a list?
   f = lambda r: tmv.fv(400 / (1+r) + 500 / (1+r)**2 + 1000 / (1+r)**3, r, 3)
   calculates the future value of an annuity with specific deposit amounts.
+
+Price and YTM of a coupon bond with n coupon payments
 """
 
 
