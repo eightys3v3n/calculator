@@ -230,20 +230,24 @@ def annuity(pv=None, fv=None, C=None, r=None, n=None):
     """Converts between present money and future money taking into account interest rates and years past.
     pv: present value
     fv: future value with compound interest added
-    r: compound yearly interest rate
-    n: years
+    r: compound periodly interest rate
+    n: periods
+    C: periodly payment
     """
     
-
-    if pv is None:
-        return _annuity_pv(fv=fv, C=C, r=r, n=n)
-    elif fv is None:
-        return _annuity_fv(pv=pv, C=C, r=r, n=n)
-    else:
-        print("No present or future value specified")
+    supplied = sum(1 if v is not None else 0 for v in (pv, fv, C, r, n)):
+    if supplied == 3:
+        if pv is None:
+            return _annuity_fv(fv=fv, C=C, r=r, n=n)
+        elif fv is None:
+            return _annuity_pv(pv=pv, C=C, r=r, n=n)
+        else:
+            print("No present or future value specified")
+    elif supplied == 4:
+        raise NotImplemented("Can't do this yet")
     
 
-def Test_annuity(unittest.TestCase):
+class Test_annuity(unittest.TestCase): pass
     # test from fv to pv
     # test from pv to fv
         
@@ -253,6 +257,9 @@ Things still required
 
 Fix number format for large numbers
 
+Price and YTM of a coupon bond with n coupon payments. So we need to be able to use annuity to
+calculate PV and FV given four other arguments.
+
 EAR interest, APR interest rate, Nominal rate
   EAR = 1  + (APR/m)**m - 1
   m is the compounding periods per year (monthly means m=12)
@@ -261,7 +268,7 @@ annuities with n years of odd deposit amounts. maybe input a list?
   f = lambda r: tmv.fv(400 / (1+r) + 500 / (1+r)**2 + 1000 / (1+r)**3, r, 3)
   calculates the future value of an annuity with specific deposit amounts.
 
-Price and YTM of a coupon bond with n coupon payments
+
 """
 
 
