@@ -19,50 +19,8 @@ from . import finance
 
 
 locale.setlocale(locale.LC_ALL, '')
-RESULT_PRECISION = 4 # How many decimals should we round results from formulas to
 logging.basicConfig(level=logging.INFO)
 
-global FUNCTIONS
-FUNCTIONS = {} # contains all the cached function rearrangements
-
-
-# General
-def num_format(num):
-    """Format a number using commas."""
-    return "{:n}".format(num)
-
-
-def all_functions(var, expr, vars):
-    root_var = var
-    root_expr = expr
-    var = None
-    expr = None
-    functions = {}
-
-    vars.sort(key=lambda v:v.name) # so we can predict the argument order
-    root_eq = sympy.Eq(root_var, root_expr) # so we can rearrange it
-    #print("Given equation:")
-    #sympy.pprint(root_eq)
-                  
-    for var in vars:
-        try:
-            expr, = sympy.solve(root_eq, var)
-        except NotImplementedError as e:
-            print("No method found to solve for {} in equation".format(var))
-            sympy.pprint(root_eq)
-            continue
-        if not expr:
-            #print("Couldn't solve for {}".format(var.name))
-            continue
-        eq = sympy.Eq(var, expr)
-        #print("Derived equation:")
-        #sympy.pprint(eq)
-
-        new_vars = vars.copy()
-        new_vars.remove(var)
-        functions[var.name] = sympy.lambdify(new_vars, expr)
-    return functions    
-        
 
 """
 Things still required

@@ -7,8 +7,50 @@ import locale
 import sympy
 # for equation rearranging
 
-global FUNCTIONS
+global FORMULAS
+FORMULAS = {}
 # contains all the cached function rearrangements
+
+RESULT_PRECISION = 4 # How many decimals should we round results from formulas to
+
+
+def num_format(num):
+    """Format a number using commas and 4 decimal places."""
+    num = round(num, 4)
+    return "{:,.4f}".format(num)
+
+
+def all_functions(var, expr, vars):
+    """Generates formulas to solve for as many variables in the given expression as the symply module can."""
+    root_var = var
+    root_expr = expr
+    var = None
+    expr = None
+    functions = {}
+
+    vars.sort(key=lambda v:v.name) # so we can predict the argument order
+    root_eq = sympy.Eq(root_var, root_expr) # so we can rearrange it
+    logging.debug("Given equation:", root_eq)
+    #sympy.pprint(root_eq)
+                  
+    for var in vars:
+        try:
+            expr, = sympy.solve(root_eq, var)
+        except NotImplementedError as e:
+            print("No method found to solve for {} in equation".format(var))
+            sympy.pprint(root_eq)
+            continue
+        if not expr:
+            logging.warning("Couldn't solve for {}".format(var.name))
+            continue
+        eq = sympy.Eq(var, expr)
+        logging.debug("Derived equation:", eq)
+        #sympy.pprint(eq)
+
+        new_vars = vars.copy()
+        new_vars.remove(var)
+        functions[var.name] = sympy.lambdify(new_vars, expr)
+    return functions    
 
 
 # Time Value of Money
@@ -19,14 +61,14 @@ def tmv(pv=None, fv=None, r=None, n=None, should_round=True):
     r: compound yearly interest rate
     n: years
     """
-    global FUNCTIONS
+    global FORMULAS
     name = 'solve'
 
     # generate all rearrangements of the given expression
-    if name not in FUNCTIONS:
+    if name not in FORMULAS:
         _pv, _fv, _r, _n = sympy.symbols("pv fv r n")
         pv_expr = _fv / ((1+_r)**_n)
-        FUNCTIONS[name] = all_functions(_pv, pv_expr, [_pv, _fv, _r, _n])
+        FORMULAS[name] = all_functions(_pv, pv_expr, [_pv, _fv, _r, _n])
 
     # insist on the right number of arguments
     supplied = sum(1 if v is not None else 0 for v in (pv, fv, r, n))
@@ -34,13 +76,13 @@ def tmv(pv=None, fv=None, r=None, n=None, should_round=True):
         raise Exception("Invalid number of arguments")
 
     if pv is None:
-        ret = [FUNCTIONS[name]['pv'](fv, n, r), "PV"]
+        ret = [FORMULAS[name]['pv'](fv, n, r), "PV"]
     elif fv is None:
-        ret = [FUNCTIONS[name]['fv'](n, pv, r), "FV"]
+        ret = [FORMULAS[name]['fv'](n, pv, r), "FV"]
     elif r is None:
-        ret = [FUNCTIONS[name]['r'](fv, n, pv), "r"]
+        ret = [FORMULAS[name]['r'](fv, n, pv), "r"]
     elif n is None:
-        ret = [FUNCTIONS[name]['n'](fv, pv, r), "n"]
+        ret = [FORMULAS[name]['n'](fv, pv, r), "n"]
     else:
         print("You supplied all the arguments, there's nothing to calculate")
         return None
@@ -74,14 +116,14 @@ def perpetuity(pv=None, C=None, r=None, should_round=True):
     C: yearly payment
     r: yearly interest rate
     """
-    global FUNCTIONS
+    global FORMULAS
     name = 'perpetuity'
 
     # generate all rearrangements of the given expression
-    if name not in FUNCTIONS:
+    if name not in FORMULAS:
         pv_, C_, r_ = sympy.symbols("pv C r")
         pv_expr = C_ / r_
-        FUNCTIONS[name] = all_functions(pv_, pv_expr, [pv_, C_, r_])
+        FORMULAS[name] = all_functions(pv_, pv_expr, [pv_, C_, r_])
 
     # insist on the right number of arguments
     supplied = sum(1 if v is not None else 0 for v in (pv, C, r))
@@ -89,11 +131,11 @@ def perpetuity(pv=None, C=None, r=None, should_round=True):
         raise Exception("Invalid number of arguments")
 
     if pv is None:
-        ret = [FUNCTIONS[name]['pv'](C, r), "PV"]
+        ret = [FORMULAS[name]['pv'](C, r), "PV"]
     elif C is None:
-        ret = [FUNCTIONS[name]['C'](pv, r), "C"]
+        ret = [FORMULAS[name]['C'](pv, r), "C"]
     elif r is None:
-        ret = [FUNCTIONS[name]['r'](C, pv), "r"]
+        ret = [FORMULAS[name]['r'](C, pv), "r"]
     else:
         print("You supplied all the arguments, there's nothing to calculate")
         return None
@@ -118,14 +160,14 @@ class Test_perpetuity(unittest.TestCase):
 
 
 def _annuity_pv(pv=None, C=None, r=None, n=None, should_round=True):
-    global FUNCTIONS
+    global FORMULAS
     name = 'annuity_pv'
 
     # generate all rearrangements of the given expression
-    if name not in FUNCTIONS:
+    if name not in FORMULAS:
         _pv, _C, _r, _n = sympy.symbols("pv C r n")
         pv_expr = _C * 1/_r * (1 - 1/(1+_r)**_n)
-        FUNCTIONS[name] = all_functions(_pv, pv_expr, [_pv, _C, _r, _n])
+        FORMULAS[name] = all_functions(_pv, pv_expr, [_pv, _C, _r, _n])
     # insist on the right number of arguments
     supplied = sum(1 if v is not None else 0 for v in (pv, C, r, n))
     if supplied != 3:
@@ -133,9 +175,9 @@ def _annuity_pv(pv=None, C=None, r=None, n=None, should_round=True):
 
 
     if pv is None:
-        ret = [FUNCTIONS[name]['pv'](C, n, r), "PV"]
+        ret = [FORMULAS[name]['pv'](C, n, r), "PV"]
     elif C is None:
-        ret = [FUNCTIONS[name]['C'](n, pv, r), "C"]
+        ret = [FORMULAS[name]['C'](n, pv, r), "C"]
     elif r is None:
         raise NotImplementedError("Can't calculate for r because I can't rearrange the formula.")
         print("Use the calculator with {}PV; {}C; {}N; CPT; I/Y".format(pv, C, n))
