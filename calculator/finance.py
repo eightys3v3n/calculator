@@ -257,6 +257,10 @@ class Test_annuity(unittest.TestCase): pass
 """
 Things still required
 
+Variance of an investment:
+  Var = 1/(T-1)((R_1-R_avg)^2+...+(R_T-R_avg)^2)
+  Where T is the number of periods, R_1 is the return for period 1, R_avg is the average return for all periods.
+
 Fix number format for large numbers
 
 Price and YTM of a coupon bond with n coupon payments. So we need to be able to use annuity to
