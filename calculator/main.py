@@ -2,6 +2,7 @@ import unittest
 import logging
 
 import math
+from math import sqrt, pow
 # sqrt()
 # pow()
 
@@ -12,9 +13,11 @@ import sympy
 # for equation rearranging
 
 import statistics
+from statistics import stdev
 # stdev(arr) for std deviation
 
 from . import finance
+from .finance import tmv,num_format
 # a number of functions for my FNCE courses
 
 
