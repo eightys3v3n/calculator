@@ -21,7 +21,9 @@ def num_format(num):
 
 
 def all_functions(var, expr, vars):
-    """Generates formulas to solve for as many variables in the given expression as the symply module can."""
+    """Generates formulas to solve for as many variables in the given expression as the symply module can.
+    Returns a list of lambdas for the rearrangements. Lambdas have the equation attribute containing the sympy.Equation.
+    Also caches the sympy.Symbol objects given as vars inside 'symbols' dict element."""
     root_var = var
     root_expr = expr
     var = None
@@ -50,6 +52,15 @@ def all_functions(var, expr, vars):
         new_vars = vars.copy()
         new_vars.remove(var)
         functions[var.name] = sympy.lambdify(new_vars, expr)
+
+        # embed the equation for odd solving
+        functions[var.name].equation = eq
+
+    # embed the symbols for odd solving
+    functions['symbols'] = {}
+    for s in vars:
+        functions['symbols'][str(s)] = s
+        
     return functions    
 
 
@@ -253,6 +264,75 @@ class Test_annuity(unittest.TestCase): pass
     # test from fv to pv
     # test from pv to fv
         
+
+# Time Value of Money
+def ytm(ytm=None, fv=None, cpn=None, n=None, p=None, should_round=True):
+    """Converts between present money and future money taking into account interest rates and years past.
+    ytm: Yield to maturity.
+    fv: future value including coupon payments and payout.
+    cpn: coupon payment amount in dollars.
+    n: number of coupon payment periods.
+    p: Current market price.
+    """
+    global FORMULAS
+    name = 'ytm'
+
+    # generate all rearrangements of the given expression
+    if name not in FORMULAS:
+        _ytm, _fv, _cpn, _p, _n = sympy.symbols("ytm fv cpn p n")
+        p_expr = _cpn * (1/_ytm)*(1 - ( 1/(1+_ytm)**_n )) + (_fv/(1+_ytm)**_n)
+        FORMULAS[name] = all_functions(_p, p_expr, [_ytm, _fv, _cpn, _n, _p])
+
+    # insist on the right number of arguments
+    supplied = sum(1 if v is not None else 0 for v in (ytm, fv, cpn, n, p))
+    if supplied != 4:
+        raise Exception("Invalid number of arguments")
+    
+    if ytm is None:
+        ret = FORMULAS[name]['p'].equation.subs({'p': p, 'cpn':cpn, 'n':n, 'fv':fv})
+        rets = []
+        for i in range(1000):
+            try:
+                rets.append(sympy.nsolve(ret, sympy.Symbol("ytm"), (i+1)/1000))
+            except ValueError: pass
+            finally: pass
+        logging.debug(rets)
+        ret = [rets[0], "YTM"]
+    elif fv is None:
+        ret = [FORMULAS[name]['fv'](ytm=ytm, cpn=cpn, n=n, p=p), "FV"]
+    elif cpn is None:
+        print(FORMULAS[name]['cpn'].equation)
+        ret = [FORMULAS[name]['cpn'](ytm=ytm, fv=fv, n=n, p=p), "CPN"]
+    elif n is None:
+        ret = [FORMULAS[name]['n'](ytm=ytm, fv=fv, cpn=cpn, p=p), "n"]
+    elif p is None:
+        ret = [FORMULAS[name]['p'](ytm=ytm, fv=fv, cpn=cpn, n=n), "P"]
+    else:
+        print("You supplied all the arguments, there's nothing to calculate")
+        return None
+
+    if should_round:
+        ret[0] = round(ret[0], RESULT_PRECISION)
+    return ret
+    
+
+class Test_ytm(unittest.TestCase):
+    def test_ytm(self):
+        ret = ytm(fv=1000, cpn=25, p=957.3490, n=10)
+        self.assertEqual(ret[1], 'YTM')
+        self.assertEqual(str(ret[0]), '0.0300')
+
+    def test_fv(self):
+        ret = ytm(cpn=25, p=957.3490, n=10, ytm=0.03)
+        self.assertEqual(ret[1], 'FV')
+        self.assertEqual(round(ret[0], 4), 1000.0000)
+
+    def test_cpn(self):
+        ret = ytm(fv=1000, p=957.3490, n=10, ytm=0.03)
+        self.assertEqual(ret[1], 'CPN')
+        self.assertEqual(round(ret[0], 4), 25.0000)
+
+    # TODO test the other two function rearrangements
 
 """
 Things still required
