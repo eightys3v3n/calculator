@@ -293,10 +293,6 @@ def ytm(ytm=None, fv=None, cpn=None, n=None, p=None, should_round=True):
         rets = []
         for i in range(1000):
             try:
-<<<<<<< HEAD
-=======
-                # THIS LINE NEEDS To be changed. Essentially we are brute forcing the answer here using the rearranged formula.
->>>>>>> 1ed4fb9206856cd829f3f39546cf4f1083c1e2f0
                 rets.append(sympy.nsolve(ret, sympy.Symbol("ytm"), (i+1)/1000))
             except ValueError: pass
             finally: pass
